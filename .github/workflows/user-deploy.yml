@@ -1,0 +1,54 @@
+name: User Environment Deploy
+on:
+  push:
+    branches:
+      - main
+      - dev
+  workflow_dispatch:
+  schedule:
+    - cron: '30 21 * * *'
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    environment: user
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: 'npm'
+          
+      - name: Init secrets
+        uses: shine1594/secrets-to-env-action@v2
+        with:
+          secrets: ${{ toJSON(secrets) }}
+          secrets_env: production
+          file_name_prod: .env
+          
+      - name: Install dependencies
+        run: npm ci --prefer-offline
+          
+      - name: Start application
+        uses: nick-fields/retry@v2
+        with:
+          timeout_minutes: 50
+          max_attempts: 3
+          command: npm start
+          
+      - name: Keep Running
+        run: |
+          git config --local user.email "${GITHUB_ACTOR_ID}+${GITHUB_ACTOR}@users.noreply.github.com"
+          git config --local user.name "${GITHUB_ACTOR}"
+          git pull --rebase --autostash
+          git commit --allow-empty -m "🔄 User Keepalive"
+          git push
+          
+      - name: Cleanup workflows
+        uses: Mattraks/delete-workflow-runs@v2
+        with:
+          token: ${{ github.token }}
+          retain_days: 0
+          keep_minimum_runs: 50
